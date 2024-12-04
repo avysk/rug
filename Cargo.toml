@@ -7,3 +7,4 @@ edition = "2021"
 futures = "0.3.31"
 platform-dirs = "0.3.0"
 sea-orm = { version = "1.1.2", features = ["sqlx-sqlite", "runtime-async-std-rustls", "macros"] }
+sea-orm-migration = "1.1.2"
