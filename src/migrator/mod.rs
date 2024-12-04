@@ -1,5 +1,6 @@
 mod m20241204_000001_create_artists_table;
 mod m20241204_000002_create_albums_table;
+mod m20241204_000003_create_listening_events_table;
 
 use sea_orm_migration::prelude::*;
 pub struct Migrator;
@@ -10,6 +11,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20241204_000001_create_artists_table::Migration),
             Box::new(m20241204_000002_create_albums_table::Migration),
+            Box::new(m20241204_000003_create_listening_events_table::Migration),
         ]
     }
 }
