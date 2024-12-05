@@ -1,10 +1,11 @@
 mod entities;
 mod migrator;
 
+use crate::entities::{prelude::*, *};
 use crate::migrator::Migrator;
 use futures::executor::block_on;
 use platform_dirs::UserDirs;
-use sea_orm::{Database, DbErr};
+use sea_orm::*;
 use sea_orm_migration::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,14 @@ async fn run() -> Result<(), DbErr> {
     let conn = Database::connect(db_url).await?;
 
     Migrator::refresh(&conn).await?;
+
+    let foo_artist = artists::ActiveModel {
+        name: ActiveValue::Set("Foo".to_owned()),
+        note: ActiveValue::Set(Some("A foo artist".to_owned())),
+        ..Default::default()
+    };
+    let res = Artists::insert(foo_artist).exec(&conn).await?;
+    println!("Inserted foo artist: {:?}", res);
 
     Ok(())
 }
