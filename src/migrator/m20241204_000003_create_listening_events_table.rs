@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .table(ListeningEvents::Table)
                     .if_not_exists()
                     .col(pk_auto(ListeningEvents::Id))
-                    .col(ColumnDef::new(ListeningEvents::Date).date_time())
+                    .col(ColumnDef::new(ListeningEvents::Time).date_time())
                     .col(ColumnDef::new(ListeningEvents::Rating).float().not_null())
                     .col(
                         ColumnDef::new(ListeningEvents::AlbumId)
@@ -43,6 +43,6 @@ pub enum ListeningEvents {
     Table,
     Id,
     AlbumId,
-    Date, // can be NULL in database; means "unknown"
+    Time, // can be NULL in database; means "unknown"
     Rating,
 }
