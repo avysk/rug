@@ -25,7 +25,7 @@ fn create_db_path() -> PathBuf {
 
 fn ensure_path(path: &PathBuf) {
     if !path.exists() {
-        fs::create_dir_all(path).expect("Couldn't create directory");
+        fs::File::create(path).expect("Couldn't create directory");
     }
 }
 
