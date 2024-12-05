@@ -1,3 +1,4 @@
+mod entities;
 mod migrator;
 
 use crate::migrator::Migrator;
