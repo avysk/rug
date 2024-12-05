@@ -3,6 +3,7 @@ mod migrator;
 
 use crate::entities::{prelude::*, *};
 use crate::migrator::Migrator;
+use chrono::Utc;
 use futures::executor::block_on;
 use platform_dirs::UserDirs;
 use sea_orm::*;
@@ -13,9 +14,15 @@ use std::path::{Path, PathBuf};
 const DBNAME: &str = "rug.sqlite";
 
 fn main() {
-    if let Err(err) = block_on(run()) {
-        panic!("Error connecting to database: {}", err);
+    if let Err(err) = block_on(init_database()) {
+        panic!("Error initializing the database: {}", err);
     }
+
+    let mut siv = cursive::default();
+
+    siv.add_global_callback('q', |s| s.quit());
+
+    siv.run();
 }
 
 fn create_db_path() -> PathBuf {
@@ -36,7 +43,7 @@ fn create_db_url(filepath: &Path) -> String {
     db_url
 }
 
-async fn run() -> Result<(), DbErr> {
+async fn init_database() -> Result<(), DbErr> {
     let db_path = create_db_path();
     ensure_path(&db_path);
     let db_url = create_db_url(&db_path);
@@ -50,8 +57,19 @@ async fn run() -> Result<(), DbErr> {
         ..Default::default()
     };
     let res = Artists::insert(foo_artist).exec(&conn).await?;
-    println!("Inserted foo artist: {:?}", res);
-
+    let foo_album = albums::ActiveModel {
+        title: ActiveValue::Set("Foo Album".to_owned()),
+        artist_id: ActiveValue::Set(res.last_insert_id),
+        ..Default::default()
+    };
+    let resalb = Albums::insert(foo_album).exec(&conn).await?;
+    let foo_event = listening_events::ActiveModel {
+        album_id: ActiveValue::Set(resalb.last_insert_id),
+        rating: ActiveValue::Set(4.5),
+        time: ActiveValue::Set(Some(Utc::now().naive_utc())),
+        ..Default::default()
+    };
+    ListeningEvents::insert(foo_event).exec(&conn).await?;
     Ok(())
 }
 
