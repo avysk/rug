@@ -3,24 +3,145 @@ mod migrator;
 
 use crate::entities::{prelude::*, *};
 use crate::migrator::Migrator;
+
 use chrono::Utc;
+use clap::{Args, Parser, Subcommand};
+use cursive::view::{Nameable, SizeConstraint};
+use cursive::views::{
+    DummyView, LinearLayout, NamedView, ResizedView, ScrollView, SelectView, TextView,
+};
 use futures::executor::block_on;
 use platform_dirs::UserDirs;
 use sea_orm::*;
 use sea_orm_migration::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::exit;
 
 const DBNAME: &str = "rug.sqlite";
 
+#[derive(Debug, Parser)]
+#[command(name = "rug")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Adds entities to the database
+    Add(EntityArgs),
+    /// Lists entities from the database
+    List(ListEntityArgs),
+    /// Deletes entities from_the database
+    Delete(EntityArgs),
+}
+
+#[derive(Args, Debug)]
+#[command(flatten_help = true)]
+struct EntityArgs {
+    #[command(subcommand)]
+    entity: Entity,
+}
+
+#[derive(Args, Debug)]
+#[command(flatten_help = true)]
+struct ListEntityArgs {
+    /// Limit the number of results
+    #[arg(short, long)]
+    limit: Option<usize>,
+    #[command(subcommand)]
+    entity: ListEntity,
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum ListEntity {
+    /// List artists
+    Artists,
+    /// List albums
+    Albums,
+    /// List listening events
+    Listens,
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum Entity {
+    /// Operate on artist
+    Artist { name: String, note: Option<String> },
+    /// Operate on album
+    Album {
+        artistid: u32,
+        title: String,
+        note: Option<String>,
+    },
+    /// Operate on listening event
+    Listen { albumid: u32, rating: f64 },
+}
+
 fn main() {
-    if let Err(err) = block_on(init_database()) {
-        panic!("Error initializing the database: {}", err);
+    let args = Cli::parse();
+    match args.command {
+        Commands::List(ListEntityArgs { limit, entity }) => {
+            println!("{:?}", limit);
+            match entity {
+                ListEntity::Artists => println!("listing artists"),
+                ListEntity::Albums => println!("listing albums"),
+                ListEntity::Listens => println!("listing listening events"),
+            }
+        }
+        _ => todo!(),
     }
+    exit(0);
+    let conn = block_on(init_database())
+        .unwrap_or_else(|err| panic!("Error connecting to database: {err}"));
 
     let mut siv = cursive::default();
 
     siv.add_global_callback('q', |s| s.quit());
+
+    let artists =
+        block_on(list_artists(&conn)).unwrap_or_else(|err| panic!("Error listing artists: {err}"));
+    let mut artist_name = ScrollView::new(SelectView::new().with_name("artist name"));
+    for artist in artists.iter() {
+        artist_name
+            .get_inner_mut()
+            .get_mut()
+            .add_item(artist.name.to_owned(), artist.clone())
+    }
+    let artist_note = ScrollView::new(TextView::new("").with_name("artist note"));
+    let artist_note_scroll = artist_note.with_name("artist name scroll");
+    artist_name
+        .get_inner_mut()
+        .get_mut()
+        .set_on_select(|s, artist: &artists::Model| {
+            s.call_on_name("artist note", |view: &mut TextView| {
+                if let Some(note) = artist.note.to_owned() {
+                    view.set_content(note);
+                } else {
+                    view.set_content("");
+                }
+            });
+            s.call_on_name(
+                "artist note scroll",
+                |view_scroll: &mut ScrollView<NamedView<TextView>>| {
+                    view_scroll.scroll_to_top();
+                    view_scroll.scroll_to_left();
+                },
+            );
+        });
+    let artists_layer = ResizedView::new(
+        SizeConstraint::Full,
+        SizeConstraint::Full,
+        LinearLayout::horizontal()
+            .child(artist_name)
+            .child(DummyView::new())
+            .child(artist_note_scroll),
+    );
+    siv.add_layer(artists_layer);
+
+    siv.call_on_name("artist note", |view: &mut TextView| {
+        view.set_content("foobar")
+    });
 
     siv.run();
 }
@@ -43,13 +164,13 @@ fn create_db_url(filepath: &Path) -> String {
     db_url
 }
 
-async fn init_database() -> Result<(), DbErr> {
+async fn init_database() -> Result<DatabaseConnection, DbErr> {
     let db_path = create_db_path();
     ensure_path(&db_path);
     let db_url = create_db_url(&db_path);
     let conn = Database::connect(db_url).await?;
 
-    Migrator::refresh(&conn).await?;
+    Migrator::up(&conn, None).await?;
 
     let foo_artist = artists::ActiveModel {
         name: ActiveValue::Set("Foo".to_owned()),
@@ -70,7 +191,11 @@ async fn init_database() -> Result<(), DbErr> {
         ..Default::default()
     };
     ListeningEvents::insert(foo_event).exec(&conn).await?;
-    Ok(())
+    Ok(conn)
+}
+
+async fn list_artists(conn: &DatabaseConnection) -> Result<Vec<artists::Model>, DbErr> {
+    Artists::find().all(conn).await
 }
 
 #[cfg(test)]
