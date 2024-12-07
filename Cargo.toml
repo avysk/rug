@@ -1,10 +1,11 @@
 [package]
 name = "rug"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 
 [dependencies]
 chrono = "0.4.38"
+clap = { version = "4.5.23", features = ["derive"] }
 cursive = "0.21.0"
 futures = "0.3.31"
 platform-dirs = "0.3.0"
