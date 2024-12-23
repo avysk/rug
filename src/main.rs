@@ -49,7 +49,7 @@ struct EntityArgs {
 struct ListEntityArgs {
     /// Limit the number of results
     #[arg(short, long)]
-    limit: Option<usize>,
+    limit: Option<u64>,
     #[command(subcommand)]
     entity: ListEntity,
 }
@@ -80,11 +80,19 @@ enum Entity {
 
 fn main() {
     let args = Cli::parse();
+    let conn = block_on(init_database())
+        .unwrap_or_else(|err| panic!("Error connecting to database: {err}"));
     match args.command {
         Commands::List(ListEntityArgs { limit, entity }) => {
             println!("{:?}", limit);
             match entity {
-                ListEntity::Artists => println!("listing artists"),
+                ListEntity::Artists => {
+                    let artists = block_on(Artists::find().limit(limit).all(&conn))
+                        .unwrap_or_else(|err| panic!("Error listing artists: {err}"));
+                    for artist in artists.iter() {
+                        println!("{:?}", artist);
+                    }
+                }
                 ListEntity::Albums => println!("listing albums"),
                 ListEntity::Listens => println!("listing listening events"),
             }
@@ -92,8 +100,6 @@ fn main() {
         _ => todo!(),
     }
     exit(0);
-    let conn = block_on(init_database())
-        .unwrap_or_else(|err| panic!("Error connecting to database: {err}"));
 
     let mut siv = cursive::default();
 
