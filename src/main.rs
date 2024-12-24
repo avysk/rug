@@ -75,23 +75,37 @@ fn main() {
     let conn = block_on(database::init_database())
         .unwrap_or_else(|err| panic!("Error connecting to database: {err}"));
     match args.command {
-        Commands::List(ListEntityArgs { limit, entity }) => {
-            println!("{:?}", limit);
-            match entity {
-                ListEntity::Artists => {
-                    let artists = block_on(list::list_artists(&conn, limit))
-                        .unwrap_or_else(|err| panic!("Error listing artists: {err}"));
-                    for artist in artists.iter() {
-                        println!("{:?}", artist);
-                    }
+        Commands::List(ListEntityArgs { limit, entity }) => match entity {
+            ListEntity::Artists => {
+                let artists = block_on(list::list_artists(&conn, limit))
+                    .unwrap_or_else(|err| panic!("Error listing artists: {err}"));
+                for artist in artists.iter() {
+                    println!("{:?}", artist);
                 }
-                ListEntity::Albums => println!("listing albums"),
-                ListEntity::Listens => println!("listing listening events"),
+
+                exit(0);
             }
-        }
-        _ => todo!(),
+            ListEntity::Albums => {
+                let albums = block_on(list::list_albums(&conn, limit))
+                    .unwrap_or_else(|err| panic!("Error listing albums: {err}"));
+                for album in albums.iter() {
+                    println!("{:?}", album);
+                }
+
+                exit(0);
+            }
+            ListEntity::Listens => {
+                let listens = block_on(list::list_listening_events(&conn, limit))
+                    .unwrap_or_else(|err| panic!("Error listing listening events: {err}"));
+                for listen in listens.iter() {
+                    println!("{:?}", listen);
+                }
+
+                exit(0);
+            }
+        },
+        _ => (),
     }
-    exit(0);
 
     let mut siv = cursive::default();
 
