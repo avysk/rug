@@ -1,24 +1,16 @@
+mod database;
 mod entities;
+mod list;
 mod migrator;
 
-use crate::entities::{prelude::*, *};
-use crate::migrator::Migrator;
-
-use chrono::Utc;
 use clap::{Args, Parser, Subcommand};
 use cursive::view::{Nameable, SizeConstraint};
 use cursive::views::{
     DummyView, LinearLayout, NamedView, ResizedView, ScrollView, SelectView, TextView,
 };
+use entities::artists;
 use futures::executor::block_on;
-use platform_dirs::UserDirs;
-use sea_orm::*;
-use sea_orm_migration::prelude::*;
-use std::fs;
-use std::path::{Path, PathBuf};
 use std::process::exit;
-
-const DBNAME: &str = "rug.sqlite";
 
 #[derive(Debug, Parser)]
 #[command(name = "rug")]
@@ -80,14 +72,14 @@ enum Entity {
 
 fn main() {
     let args = Cli::parse();
-    let conn = block_on(init_database())
+    let conn = block_on(database::init_database())
         .unwrap_or_else(|err| panic!("Error connecting to database: {err}"));
     match args.command {
         Commands::List(ListEntityArgs { limit, entity }) => {
             println!("{:?}", limit);
             match entity {
                 ListEntity::Artists => {
-                    let artists = block_on(Artists::find().limit(limit).all(&conn))
+                    let artists = block_on(list::list_artists(&conn, limit))
                         .unwrap_or_else(|err| panic!("Error listing artists: {err}"));
                     for artist in artists.iter() {
                         println!("{:?}", artist);
@@ -105,8 +97,8 @@ fn main() {
 
     siv.add_global_callback('q', |s| s.quit());
 
-    let artists =
-        block_on(list_artists(&conn)).unwrap_or_else(|err| panic!("Error listing artists: {err}"));
+    let artists = block_on(list::list_artists(&conn, None))
+        .unwrap_or_else(|err| panic!("Error listing artists: {err}"));
     let mut artist_name = ScrollView::new(SelectView::new().with_name("artist name"));
     for artist in artists.iter() {
         artist_name
@@ -150,72 +142,4 @@ fn main() {
     });
 
     siv.run();
-}
-
-fn create_db_path() -> PathBuf {
-    let mut db = UserDirs::new().unwrap().document_dir;
-    db.push(DBNAME);
-    db
-}
-
-fn ensure_path(path: &PathBuf) {
-    if !path.exists() {
-        fs::File::create(path).expect("Couldn't create directory");
-    }
-}
-
-fn create_db_url(filepath: &Path) -> String {
-    let mut db_url = filepath.to_str().unwrap().to_string();
-    db_url.insert_str(0, "sqlite://");
-    db_url
-}
-
-async fn init_database() -> Result<DatabaseConnection, DbErr> {
-    let db_path = create_db_path();
-    ensure_path(&db_path);
-    let db_url = create_db_url(&db_path);
-    let conn = Database::connect(db_url).await?;
-
-    Migrator::up(&conn, None).await?;
-
-    let foo_artist = artists::ActiveModel {
-        name: ActiveValue::Set("Foo".to_owned()),
-        note: ActiveValue::Set(Some("A foo artist".to_owned())),
-        ..Default::default()
-    };
-    let res = Artists::insert(foo_artist).exec(&conn).await?;
-    let foo_album = albums::ActiveModel {
-        title: ActiveValue::Set("Foo Album".to_owned()),
-        artist_id: ActiveValue::Set(res.last_insert_id),
-        ..Default::default()
-    };
-    let resalb = Albums::insert(foo_album).exec(&conn).await?;
-    let foo_event = listening_events::ActiveModel {
-        album_id: ActiveValue::Set(resalb.last_insert_id),
-        rating: ActiveValue::Set(4.5),
-        time: ActiveValue::Set(Some(Utc::now().naive_utc())),
-        ..Default::default()
-    };
-    ListeningEvents::insert(foo_event).exec(&conn).await?;
-    Ok(conn)
-}
-
-async fn list_artists(conn: &DatabaseConnection) -> Result<Vec<artists::Model>, DbErr> {
-    Artists::find().all(conn).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_path_ends_with_database_name() {
-        let db = create_db_path();
-        assert!(db.ends_with(DBNAME));
-    }
-
-    #[test]
-    fn test_url_starts_with_sqlite_scheme() {
-        let db_url = create_db_url(&PathBuf::from("foo"));
-        assert!(db_url.starts_with("sqlite://"));
-    }
 }
