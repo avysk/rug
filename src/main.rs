@@ -152,7 +152,11 @@ fn main() {
     siv.add_layer(artists_layer);
 
     siv.call_on_name("artist note", |view: &mut TextView| {
-        view.set_content("foobar")
+        view.set_content(if artists.len() > 0 {
+            artists[0].note.to_owned().unwrap_or_else(|| "".to_owned())
+        } else {
+            "".to_owned()
+        });
     });
 
     siv.run();
